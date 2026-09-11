@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dawn Vocab Daily</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="brand-icon">📗</span> Dawn Vocab Daily</div>
+    <div class="nav-icons">
+      <button data-nav="home" title="Home">🏠</button>
+      <button data-nav="deck" title="My deck">🗂️</button>
+      <button data-nav="story" title="Word story">📖</button>
+      <button data-nav="offline" title="Offline">⬇️</button>
+      <button data-nav="dashboard" title="Dashboard">📊</button>
+    </div>
+  </div>
+
+  <!-- ================= HOME ================= -->
+  <section id="view-home" class="view active">
+    <div class="eyebrow">Dawn Vocab Daily</div>
+    <h1 class="hero">Learn today's English<br>from today's news</h1>
+    <p class="subtitle">Fresh Dawn articles with Urdu meanings, real-voice pronunciation, speaking practice, flashcards, streaks and stories that tie every word together.</p>
+
+    <div class="quick-actions">
+      <button class="qa-btn" data-nav="deck">🧠 Review <span class="badge" id="review-badge">0</span></button>
+      <button class="qa-btn" data-nav="dashboard">📈 Dashboard</button>
+      <button class="qa-btn" data-nav="deck">🗂️ My deck <span id="deck-count-inline">(0)</span></button>
+      <button class="qa-btn" data-nav="story">📖 Word story</button>
+      <button class="qa-btn" data-nav="speaking">🎤 Speaking history</button>
+      <button class="qa-btn" data-nav="offline">⬇️ Offline <span id="offline-count-inline">(0)</span></button>
+    </div>
+
+    <div class="search-row">
+      <input id="search-input" placeholder="Search any topic — economy, sports...">
+      <button class="btn-primary" id="search-btn">Search</button>
+    </div>
+
+    <div class="pill-row" id="category-row">
+      <button class="pill active" data-cat="top">Top</button>
+      <button class="pill" data-cat="pakistan">Pakistan</button>
+      <button class="pill" data-cat="world">World</button>
+      <button class="pill" data-cat="business">Business</button>
+      <button class="pill" data-cat="sport">Sport</button>
+      <button class="pill" data-cat="opinion">Opinion</button>
+      <button class="pill" id="refresh-btn">↻ Refresh</button>
+    </div>
+
+    <div class="card">
+      <div class="slider-label"><span>WORD DIFFICULTY</span></div>
+      <div class="pill-row" id="difficulty-row" style="margin-bottom:18px;">
+        <button class="pill" data-diff="beginner">Beginner</button>
+        <button class="pill" data-diff="intermediate">Intermediate</button>
+        <button class="pill active" data-diff="advanced">Advanced</button>
+        <button class="pill" data-diff="mixed">Mixed</button>
+      </div>
+      <div class="slider-label"><span>WORDS</span><span id="word-count-label">10</span></div>
+      <input type="range" id="word-count-slider" min="5" max="15" value="10">
+    </div>
+
+    <h2 class="section-title">Fresh from Dawn today</h2>
+    <div id="article-list"><div class="loading">Loading fresh Dawn articles…</div></div>
+  </section>
+
+  <!-- ================= LESSON ================= -->
+  <section id="view-lesson" class="view">
+    <button class="back-btn" data-nav="home">← Back to articles</button>
+    <div id="lesson-header"></div>
+
+    <div class="tabs-row">
+      <button class="tab-btn" data-tab="flashcards">Flashcards</button>
+      <button class="tab-btn" data-tab="wordlist">Word list</button>
+      <button class="tab-btn" data-tab="pictures">Pictures</button>
+      <button class="tab-btn" data-tab="memory">Memory game</button>
+      <button class="tab-btn" data-tab="article">Article</button>
+      <button class="tab-btn" data-tab="practice">Practice</button>
+      <button class="tab-btn" data-tab="story">Story</button>
+      <button class="tab-btn active" data-tab="summary">Summary</button>
+    </div>
+
+    <div id="tab-content" class="card"><div class="loading">Preparing your lesson…</div></div>
+  </section>
+
+  <!-- ================= DECK ================= -->
+  <section id="view-deck" class="view">
+    <button class="back-btn" data-nav="home">← Back</button>
+    <h2 class="section-title">Your saved words</h2>
+    <div id="deck-top-bar"></div>
+    <div id="deck-content"></div>
+  </section>
+
+  <!-- ================= STORY (never-forget) ================= -->
+  <section id="view-story" class="view">
+    <button class="back-btn" data-nav="home">← Back</button>
+    <h2 class="section-title">Story from your saved words</h2>
+    <p class="subtitle">Every word you save gets woven into an ongoing story. Old chapters stay saved — add new words as a new chapter, or rewrite the whole story fresh.</p>
+    <div class="card">
+      <h3 style="margin:0 0 6px;">📖 Your never-forget story</h3>
+      <p id="story-stats" class="subtitle" style="margin-bottom:16px;"></p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn-primary" id="add-new-words-btn">✏️ Add new words</button>
+        <button class="btn-outline" id="rewrite-story-btn">✨ Rewrite story</button>
+      </div>
+    </div>
+    <div id="chapters-list"></div>
+  </section>
+
+  <!-- ================= OFFLINE ================= -->
+  <section id="view-offline" class="view">
+    <button class="back-btn" data-nav="home">← Back</button>
+    <h2 class="section-title">Saved for offline learning</h2>
+    <p class="subtitle">Article paragraphs, words, story and summary saved on this device — open them any time, even without internet.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <strong id="offline-count-label">0 lessons available offline</strong>
+      <button class="link-btn" id="clear-offline-btn" style="color:var(--danger);">🗑 Clear all</button>
+    </div>
+    <div id="offline-list"></div>
+  </section>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section id="view-dashboard" class="view">
+    <button class="back-btn" data-nav="home">← Back</button>
+    <h2 class="section-title">Dashboard</h2>
+    <div class="stat-row">
+      <div class="stat-box"><div class="num" id="dash-deck">0</div><div class="lbl">SAVED WORDS</div></div>
+      <div class="stat-box"><div class="num" id="dash-lessons">0</div><div class="lbl">LESSONS DONE</div></div>
+      <div class="stat-box"><div class="num" id="dash-streak">0</div><div class="lbl">DAY STREAK</div></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Difficulty breakdown</h3>
+      <div id="dash-breakdown"></div>
+    </div>
+  </section>
+
+  <!-- ================= SPEAKING HISTORY ================= -->
+  <section id="view-speaking" class="view">
+    <button class="back-btn" data-nav="home">← Back</button>
+    <h2 class="section-title">Speaking history</h2>
+    <div id="speaking-list"></div>
+  </section>
+
+  <div id="word-modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" id="modal-close">×</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
