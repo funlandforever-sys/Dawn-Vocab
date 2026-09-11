@@ -9,7 +9,24 @@
    Everything the user saves lives in localStorage on their device.
    ========================================================= */
 
-const PROXY = url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+const PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+async function fetchViaProxies(url) {
+  let lastErr;
+  for (const makeUrl of PROXIES) {
+    try {
+      const res = await fetch(makeUrl(url));
+      if (!res.ok) throw new Error('bad status ' + res.status);
+      const text = await res.text();
+      if (!text || text.length < 20) throw new Error('empty response');
+      return text;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('all proxies failed');
+}
 const FEEDS = {
   top: 'https://www.dawn.com/feeds/home',
   pakistan: 'https://www.dawn.com/feeds/pakistan',
@@ -236,8 +253,7 @@ async function buildWordObjects(words, article) {
 /* ---------------- RSS fetching ---------------- */
 async function fetchFeed(category) {
   const url = FEEDS[category] || FEEDS.top;
-  const res = await fetch(PROXY(url));
-  const xmlText = await res.text();
+  const xmlText = await fetchViaProxies(url);
   const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
   const items = [...doc.querySelectorAll('item')].slice(0, 8);
   return items.map(item => {
@@ -261,8 +277,7 @@ async function fetchFeed(category) {
 
 async function fetchFullArticleText(link) {
   try {
-    const res = await fetch(PROXY(link));
-    const html = await res.text();
+    const html = await fetchViaProxies(link);
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const selectors = ['.story__content p', 'article p', '.content p', 'p'];
     for (const sel of selectors) {
@@ -439,337 +454,4 @@ function renderArticleTab(c) {
   c.innerHTML = `
     <div class="content-title"><span>Original article extract</span>
       <button class="listen-btn" id="listen-article">🔊 Read aloud</button></div>
-    <p class="small-note" style="margin-bottom:14px;">Tap any word to see its detailed Urdu meaning and save it to your deck.</p>
-    <div class="body-text">${highlightWords(text, state.currentWords)}</div>`;
-  bindHighlightClicks(c);
-  qs('#listen-article').addEventListener('click', () => speak(text, 'Article extract'));
-}
-
-function renderFlashcardsTab(c) {
-  const words = state.currentWords;
-  const i = state.flashIndex;
-  const w = words[i];
-  const pct = ((i + 1) / words.length) * 100;
-  c.innerHTML = `
-    <div class="card-meta-row"><span>CARD ${i + 1} OF ${words.length}</span><span>TAP CARD TO FLIP</span></div>
-    <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-    <div class="flashcard" id="flash-el">
-      ${state.flashFlipped ? `
-        <div class="flash-urdu">${w.urdu || '—'}</div>
-        <div class="flash-def">${escapeHtml(w.definition)}</div>
-        <button class="pronounce-btn" id="save-flash">${isSaved(w) ? '★ Saved' : '☆ Save to deck'}</button>
-      ` : `
-        <span class="pos-badge">${w.pos}</span>
-        <h3 class="flash-word">${w.display}</h3>
-        <span class="flash-phonetic">${w.phonetic || ''}</span>
-        <button class="pronounce-btn" id="pronounce-flash">🔊 Pronounce</button>
-      `}
-    </div>
-    <div class="card-nav-row">
-      <button class="btn-outline" id="flash-prev" ${i === 0 ? 'disabled' : ''}>← Prev</button>
-      <button class="btn-outline" id="flash-next" ${i === words.length - 1 ? 'disabled' : ''}>Next →</button>
-    </div>`;
-  qs('#flash-el').addEventListener('click', e => {
-    if (e.target.closest('button')) return;
-    state.flashFlipped = !state.flashFlipped;
-    renderFlashcardsTab(c);
-  });
-  const pron = qs('#pronounce-flash'); if (pron) pron.addEventListener('click', ev => { ev.stopPropagation(); speak(w.word); });
-  const sv = qs('#save-flash'); if (sv) sv.addEventListener('click', ev => { ev.stopPropagation(); toggleSaveWord(w); renderFlashcardsTab(c); });
-  const prev = qs('#flash-prev'); if (prev) prev.addEventListener('click', () => { state.flashIndex--; state.flashFlipped = false; renderFlashcardsTab(c); });
-  const next = qs('#flash-next'); if (next) next.addEventListener('click', () => { state.flashIndex++; state.flashFlipped = false; renderFlashcardsTab(c); });
-}
-
-function renderWordListTab(c) {
-  c.innerHTML = '<div class="content-title"><span>Word list</span></div>' +
-    state.currentWords.map(w => `
-      <div class="word-card">
-        <div class="word-card-top">
-          <div>
-            <h3>${w.display}</h3>
-            <div class="word-meta">${w.phonetic || ''} · ${w.pos} · <span class="diff-tag">${w.difficulty}</span></div>
-          </div>
-          <button class="listen-btn" data-word="${w.word}">🔊</button>
-        </div>
-        <div class="urdu-line">${w.urdu || '—'}</div>
-        <div class="eng-def">${escapeHtml(w.definition)}</div>
-        <div class="example-line">${escapeHtml(w.example)}</div>
-        <button class="save-toggle ${isSaved(w) ? 'saved' : ''}" data-word="${w.word}">${isSaved(w) ? 'Saved' : 'Save'}</button>
-      </div>`).join('');
-  qsa('.listen-btn[data-word]', c).forEach(b => b.addEventListener('click', () => {
-    const w = state.currentWords.find(x => x.word === b.dataset.word); speak(w.word);
-  }));
-  qsa('.save-toggle', c).forEach(b => b.addEventListener('click', () => {
-    const w = state.currentWords.find(x => x.word === b.dataset.word);
-    toggleSaveWord(w); renderWordListTab(c);
-  }));
-}
-
-async function renderPicturesTab(c) {
-  c.innerHTML = `
-    <div class="content-title"><span>A picture for every word</span></div>
-    <p class="small-note" style="margin-bottom:14px;">Real, openly-licensed photos via Openverse — visual memory makes vocabulary stick far longer.</p>
-    <div class="pic-grid" id="pic-grid">${state.currentWords.map(w => `
-      <div class="pic-card"><img id="img-${w.word}" src="" alt="${w.word}"><div class="pic-label">${w.display}</div></div>`).join('')}</div>`;
-  for (const w of state.currentWords) {
-    fetchPicture(w.word).then(url => { const img = qs(`#img-${w.word}`); if (img) img.src = url; });
-  }
-}
-
-function renderMemoryTab(c) {
-  const words = state.currentWords.slice(0, 6);
-  const tiles = [
-    ...words.map(w => ({ key: w.word, label: w.display, type: 'en' })),
-    ...words.map(w => ({ key: w.word, label: w.urdu || w.word, type: 'ur' })),
-  ].sort(() => Math.random() - 0.5);
-  let selected = [];
-  let matched = new Set();
-  c.innerHTML = `<div class="content-title"><span>Memory game</span></div>
-    <p class="small-note" style="margin-bottom:14px;">Match each English word with its Urdu meaning.</p>
-    <div class="mem-grid" id="mem-grid"></div>`;
-  const grid = qs('#mem-grid');
-  tiles.forEach((t, idx) => {
-    const el = document.createElement('div');
-    el.className = 'mem-tile';
-    el.textContent = t.label;
-    el.dataset.key = t.key; el.dataset.idx = idx;
-    el.addEventListener('click', () => {
-      if (matched.has(t.key) || selected.find(s => s.idx === idx)) return;
-      el.classList.add('selected');
-      selected.push({ idx, key: t.key, el });
-      if (selected.length === 2) {
-        if (selected[0].key === selected[1].key) {
-          matched.add(selected[0].key);
-          selected.forEach(s => { s.el.classList.remove('selected'); s.el.classList.add('matched'); });
-          selected = [];
-          if (matched.size === words.length) toast('🎉 All matched!');
-        } else {
-          setTimeout(() => { selected.forEach(s => s.el.classList.remove('selected')); selected = []; }, 700);
-        }
-      }
-    });
-    grid.appendChild(el);
-  });
-}
-
-function renderPracticeTab(c) {
-  const words = state.currentWords;
-  let qIndex = 0, correctCount = 0;
-  function renderQ() {
-    if (qIndex >= words.length) {
-      c.innerHTML = `<div class="content-title"><span>Practice complete 🎉</span></div>
-        <p class="body-text" style="font-size:17px;">You scored ${correctCount} / ${words.length}.</p>
-        <button class="btn-primary" id="retry-practice">Try again</button>`;
-      qs('#retry-practice').addEventListener('click', () => { qIndex = 0; correctCount = 0; renderQ(); });
-      return;
-    }
-    const w = words[qIndex];
-    const distractors = words.filter(x => x.word !== w.word).sort(() => Math.random() - 0.5).slice(0, 3).map(x => x.display);
-    const options = [w.display, ...distractors].sort(() => Math.random() - 0.5);
-    c.innerHTML = `
-      <div class="content-title"><span>Practice</span></div>
-      <div class="quiz-progress">Question ${qIndex + 1} of ${words.length}</div>
-      <div class="quiz-q">Which word means: <strong>“${escapeHtml(w.definition)}”</strong>?</div>
-      <div class="quiz-opts">${options.map(o => `<button class="quiz-opt" data-opt="${o}">${o}</button>`).join('')}</div>`;
-    qsa('.quiz-opt', c).forEach(btn => btn.addEventListener('click', () => {
-      qsa('.quiz-opt', c).forEach(b => b.disabled = true);
-      if (btn.dataset.opt === w.display) { btn.classList.add('correct'); correctCount++; }
-      else { btn.classList.add('wrong'); qsa('.quiz-opt', c).find(b => b.dataset.opt === w.display)?.classList.add('correct'); }
-      setTimeout(() => { qIndex++; renderQ(); }, 900);
-    }));
-  }
-  renderQ();
-}
-
-/* ---------------- word save / deck ---------------- */
-function isSaved(w) { return state.deck.some(d => d.word === w.word); }
-function toggleSaveWord(w) {
-  if (isSaved(w)) {
-    state.deck = state.deck.filter(d => d.word !== w.word);
-    toast(`Removed "${w.display}"`);
-  } else {
-    state.deck.unshift({ ...w, savedAt: new Date().toISOString() });
-    toast(`Saved "${w.display}" ★`);
-  }
-  persist();
-  refreshHomeBadges();
-}
-
-function openWordModal(w) {
-  qs('#modal-body').innerHTML = `
-    <span class="pos-badge">${w.pos} · ${w.difficulty}</span>
-    <h2 style="margin:10px 0 2px;">${w.display}</h2>
-    <div class="word-meta">${w.phonetic || ''}</div>
-    <div class="urdu-line">${w.urdu || '—'}</div>
-    <div class="eng-def">${escapeHtml(w.definition)}</div>
-    <div class="example-line">${escapeHtml(w.example)}</div>
-    <div style="display:flex;gap:10px;margin-top:16px;">
-      <button class="pronounce-btn" id="modal-pronounce">🔊 Pronounce</button>
-      <button class="pronounce-btn" id="modal-save">${isSaved(w) ? '★ Saved' : '☆ Save to deck'}</button>
-    </div>`;
-  qs('#word-modal').classList.remove('hidden');
-  qs('#modal-pronounce').addEventListener('click', () => speak(w.word));
-  qs('#modal-save').addEventListener('click', () => { toggleSaveWord(w); openWordModal(w); });
-}
-qs('#modal-close').addEventListener('click', () => qs('#word-modal').classList.add('hidden'));
-qs('#word-modal').addEventListener('click', e => { if (e.target.id === 'word-modal') e.currentTarget.classList.add('hidden'); });
-
-/* ---------------- DECK VIEW ---------------- */
-function renderDeck() {
-  qs('#deck-top-bar').innerHTML = `
-    <div class="stat-row">
-      <div class="stat-box"><div class="num">${state.deck.length}</div><div class="lbl">SAVED WORDS</div></div>
-      <div class="stat-box"><div class="num">${new Set(state.deck.map(d => d.lessonLink)).size}</div><div class="lbl">ARTICLES</div></div>
-      <div class="stat-box"><div class="num">${state.deck.filter(d => d.difficulty === 'Hard').length}</div><div class="lbl">HARD WORDS</div></div>
-    </div>
-    ${state.deck.length ? `<button class="link-btn" id="clear-deck-btn" style="color:var(--danger);">🗑 Clear deck</button>` : ''}`;
-  const cbtn = qs('#clear-deck-btn');
-  if (cbtn) cbtn.addEventListener('click', () => {
-    if (confirm('Clear your entire saved-words deck?')) { state.deck = []; persist(); renderDeck(); refreshHomeBadges(); }
-  });
-
-  const c = qs('#deck-content');
-  if (!state.deck.length) { c.innerHTML = '<div class="empty-state">No saved words yet. Open a lesson and tap ☆ Save on any word.</div>'; return; }
-  c.innerHTML = state.deck.map(w => `
-    <div class="word-card">
-      <div class="word-card-top">
-        <div><h3>${w.display}</h3><div class="word-meta">${w.phonetic || ''} · ${w.pos} · <span class="diff-tag">${w.difficulty}</span></div></div>
-        <button class="listen-btn" data-word="${w.word}">🔊</button>
-      </div>
-      <div class="urdu-line">${w.urdu || '—'}</div>
-      <div class="eng-def">${escapeHtml(w.definition)}</div>
-      <div class="chip-row"><span class="chip">from “${escapeHtml((w.lessonTitle || '').slice(0, 40))}”</span></div>
-      <button class="save-toggle saved" data-word="${w.word}">Remove</button>
-    </div>`).join('');
-  qsa('.listen-btn[data-word]', c).forEach(b => b.addEventListener('click', () => speak(b.dataset.word)));
-  qsa('.save-toggle', c).forEach(b => b.addEventListener('click', () => {
-    state.deck = state.deck.filter(d => d.word !== b.dataset.word);
-    persist(); renderDeck(); refreshHomeBadges();
-  }));
-}
-
-/* ---------------- STORY VIEW (never-forget story) ---------------- */
-function renderStoryView() {
-  const included = new Set(state.chapters.flatMap(ch => ch.words));
-  const waiting = state.deck.filter(w => !included.has(w.word));
-  qs('#story-stats').textContent = `${state.deck.length} saved words · ${state.chapters.length} chapters · ${waiting.length} new words waiting`;
-  qs('#add-new-words-btn').disabled = waiting.length === 0;
-
-  const list = qs('#chapters-list');
-  if (!state.chapters.length) { list.innerHTML = '<div class="empty-state">No chapters yet. Save some words, then tap "Add new words".</div>'; return; }
-  list.innerHTML = state.chapters.map((ch, idx) => `
-    <div class="chapter-card">
-      <div class="chapter-meta">
-        <span class="chapter-date">Chapter ${idx + 1} · ${ch.date}</span>
-        <div><button class="icon-btn" data-listen="${idx}">🔊</button><button class="icon-btn" data-del="${idx}">🗑</button></div>
-      </div>
-      <h3 style="margin:6px 0 10px;">${escapeHtml(ch.title)}</h3>
-      <div class="body-text" style="font-size:16px;">${highlightChapterWords(ch.text, ch.words)}</div>
-      <div class="chip-row">${ch.words.map(w => `<span class="chip">${w}</span>`).join('')}</div>
-    </div>`).join('');
-  qsa('[data-listen]', list).forEach(b => b.addEventListener('click', () => speak(state.chapters[+b.dataset.listen].text, 'Story chapter')));
-  qsa('[data-del]', list).forEach(b => b.addEventListener('click', () => {
-    state.chapters.splice(+b.dataset.del, 1); persist(); renderStoryView();
-  }));
-}
-function highlightChapterWords(text, words) {
-  let out = escapeHtml(text);
-  words.forEach(w => { out = out.replace(new RegExp(`\\b(${w})\\b`, 'gi'), '<span class="hl">$1</span>'); });
-  return out;
-}
-const CHAPTER_TITLES = ['A Beacon in the Storm', 'Words That Stayed', 'The Turning Page', 'Echoes We Kept', 'A New Chapter Begins'];
-qs('#add-new-words-btn').addEventListener('click', () => {
-  const included = new Set(state.chapters.flatMap(ch => ch.words));
-  const waiting = state.deck.filter(w => !included.has(w.word)).slice(0, 12);
-  if (!waiting.length) return;
-  const text = generateStory(waiting);
-  state.chapters.unshift({
-    date: new Date().toISOString().slice(0, 10),
-    title: CHAPTER_TITLES[state.chapters.length % CHAPTER_TITLES.length],
-    text, words: waiting.map(w => w.word),
-  });
-  persist(); renderStoryView(); toast('New chapter added ✨');
-});
-qs('#rewrite-story-btn').addEventListener('click', () => {
-  if (!state.deck.length) { toast('Save some words first'); return; }
-  if (!confirm('Rewrite the whole story from all saved words? Old chapters will be replaced.')) return;
-  const text = generateStory(state.deck.slice(0, 20));
-  state.chapters = [{ date: new Date().toISOString().slice(0, 10), title: 'The Story, Rewritten', text, words: state.deck.slice(0, 20).map(w => w.word) }];
-  persist(); renderStoryView();
-});
-
-/* ---------------- OFFLINE VIEW ---------------- */
-function saveLessonOffline(article) {
-  state.lessons[article.link] = {
-    title: article.title, link: article.link, date: new Date().toISOString().slice(0, 10),
-    difficulty: state.difficulty, wordCount: state.currentWords.length,
-    description: article.description, words: state.currentWords, fullText: article.fullText,
-  };
-  persist(); refreshHomeBadges();
-  toast('Saved offline ✓');
-  qs('#save-offline-btn').textContent = '✓ Saved offline';
-}
-function renderOfflineView() {
-  const items = Object.values(state.lessons);
-  qs('#offline-count-label').textContent = `${items.length} lesson${items.length === 1 ? '' : 's'} available offline`;
-  const list = qs('#offline-list');
-  if (!items.length) { list.innerHTML = '<div class="empty-state">Nothing saved offline yet. Open a lesson and tap "Save offline".</div>'; return; }
-  list.innerHTML = items.map(l => `
-    <div class="offline-card">
-      <div class="offline-meta">🕐 ${l.date} · ${(l.difficulty || '').toUpperCase()} · ${l.wordCount} WORDS</div>
-      <h3 style="margin:0 0 8px;">${escapeHtml(l.title)}</h3>
-      <p class="article-excerpt">${escapeHtml((l.description || '').slice(0, 140))}…</p>
-      <div class="offline-actions">
-        <button class="btn-primary" data-open="${l.link}">📖 Open lesson</button>
-        <span class="saved-tag">⬇ SAVED</span>
-        <button class="icon-btn" data-del="${l.link}">🗑</button>
-      </div>
-    </div>`).join('');
-  qsa('[data-open]', list).forEach(b => b.addEventListener('click', () => {
-    const l = state.lessons[b.dataset.open];
-    state.currentArticle = { title: l.title, link: l.link, description: l.description, fullText: l.fullText };
-    state.currentWords = l.words;
-    showView('lesson');
-    qs('#lesson-header').innerHTML = `
-      <h2 class="lesson-headline">${escapeHtml(l.title)}</h2>
-      <a class="lesson-link" href="${l.link}" target="_blank" rel="noopener">Read the full article on Dawn →</a><br>
-      <span class="saved-tag" style="margin-top:10px;">⬇ Loaded from offline storage</span>`;
-    renderTab('summary');
-  }));
-  qsa('[data-del]', list).forEach(b => b.addEventListener('click', () => {
-    delete state.lessons[b.dataset.del]; persist(); renderOfflineView(); refreshHomeBadges();
-  }));
-}
-qs('#clear-offline-btn').addEventListener('click', () => {
-  if (!Object.keys(state.lessons).length) return;
-  if (confirm('Clear all offline lessons?')) { state.lessons = {}; persist(); renderOfflineView(); refreshHomeBadges(); }
-});
-
-/* ---------------- DASHBOARD ---------------- */
-function renderDashboard() {
-  qs('#dash-deck').textContent = state.deck.length;
-  qs('#dash-lessons').textContent = state.lessonsCompleted;
-  qs('#dash-streak').textContent = state.streak;
-  const counts = { Easy: 0, Medium: 0, Hard: 0 };
-  state.deck.forEach(w => counts[w.difficulty] = (counts[w.difficulty] || 0) + 1);
-  qs('#dash-breakdown').innerHTML = Object.entries(counts).map(([k, v]) => `
-    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
-      <span>${k}</span><strong>${v}</strong></div>`).join('') || '<p class="small-note">Save some words to see your breakdown.</p>';
-}
-
-/* ---------------- SPEAKING HISTORY ---------------- */
-function renderSpeakingView() {
-  const list = qs('#speaking-list');
-  if (!state.speaking.length) { list.innerHTML = '<div class="empty-state">Nothing spoken yet — tap any 🔊 button around the app.</div>'; return; }
-  list.innerHTML = state.speaking.slice(0, 50).map(s => `
-    <div class="word-card" style="padding:16px 22px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span>${escapeHtml(s.text.slice(0, 80))}</span>
-        <span class="word-meta">${new Date(s.at).toLocaleString()}</span>
-      </div>
-    </div>`).join('');
-}
-
-/* ---------------- init ---------------- */
-refreshHomeBadges();
-loadArticles();
+    <p class="small-note" style="margin-bottom:14px;">Tap any word t
