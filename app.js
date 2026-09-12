@@ -10,20 +10,26 @@
    ========================================================= */
 
 const PROXIES = [
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
 ];
 async function fetchViaProxies(url) {
   let lastErr;
   for (const makeUrl of PROXIES) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // give up on a slow proxy after 8s
     try {
-      const res = await fetch(makeUrl(url));
+      const res = await fetch(makeUrl(url), { signal: controller.signal });
+      clearTimeout(timeout);
       if (!res.ok) throw new Error('bad status ' + res.status);
       const text = await res.text();
       if (!text || text.length < 20) throw new Error('empty response');
       return text;
-    } catch (e) { lastErr = e; }
+    } catch (e) {
+      clearTimeout(timeout);
+      lastErr = e;
+    }
   }
   throw lastErr || new Error('all proxies failed');
 }
@@ -292,8 +298,9 @@ async function fetchFullArticleText(link) {
 async function loadArticles() {
   const list = qs('#article-list');
   list.innerHTML = '<div class="loading">Loading fresh Dawn articles…</div>';
+  const overallTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 26000));
   try {
-    const articles = await fetchFeed(state.category);
+    const articles = await Promise.race([fetchFeed(state.category), overallTimeout]);
     if (!articles.length) throw new Error('empty');
     list.innerHTML = '';
     articles.forEach(a => list.appendChild(renderArticleCard(a)));
@@ -446,12 +453,4 @@ function renderStoryTab(c) {
     <div class="body-text">${highlightWords(story, state.currentWords)}</div>
     <p class="small-note">Template-generated for free from your selected words (no paid AI). Swap in your own OpenAI/Anthropic key in app.js → generateStory() for richer prose.</p>`;
   bindHighlightClicks(c);
-  qs('#listen-story').addEventListener('click', () => speak(story, 'Lesson story'));
-}
-
-function renderArticleTab(c) {
-  const text = state.currentArticle.fullText || state.currentArticle.description;
-  c.innerHTML = `
-    <div class="content-title"><span>Original article extract</span>
-      <button class="listen-btn" id="listen-article">🔊 Read aloud</button></div>
-    <p class="small-note" style="margin-bottom:14px;">Tap any word t
+  qs('#listen-story').addEventListener('click', () =>
